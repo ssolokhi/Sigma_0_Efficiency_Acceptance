@@ -1,4 +1,4 @@
-# Spendings Analysis Bot
+# $Sigma^0$ Efficiency Calculation
 
 ---
 
@@ -12,4 +12,10 @@ This repository contains:
 
 - this **README** file;
 
-- 
+- a **fitting_functions.py** file, where functions for fitting the signal and background are defined;
+
+- main **sigma_efficiency.py** file, where the actual analysis is carried out.
+
+## Notice!
+
+If 'import ROOT' doesn't work, then navigate to the ROOT installation folder, move to the 'bin' folder and type *source thisroot.sh*.
