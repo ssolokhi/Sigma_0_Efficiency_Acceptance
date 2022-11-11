@@ -7,7 +7,7 @@ def visualize(histo, option = ''):
 	histo.SetLineColor(rt.kBlue)
 	histo.Draw(option)
 
-def visualize_n(histos, canvas, in_raw = 3, option = ''):
+'''def visualize_n(histos, canvas, in_raw = 3, option = ''):
 	n = len(histos)
 	in_column = n // in_raw
 	if in_column * in_raw != n: in_column += 1
@@ -19,4 +19,4 @@ def visualize_n(histos, canvas, in_raw = 3, option = ''):
 def save(obj, name):
 	obj.Draw()
 	obj.Write(name)
-
+'''
