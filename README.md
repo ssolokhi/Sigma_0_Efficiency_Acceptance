@@ -1,4 +1,4 @@
-# $Sigma^0$ Efficiency Calculation
+# $\Sigma^0$ Efficiency Calculation
 
 ---
 
