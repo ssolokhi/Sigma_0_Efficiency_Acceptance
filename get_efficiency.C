@@ -77,7 +77,7 @@ void get_efficiency() {
 	if (!histos_MC) return;
 	TH1F *generated_Sigma_spectrum = dynamic_cast<TH1F*>(histos_MC->FindObject("hmc4piSig0Eta"));
 
-	TH1F *inv_mass_in_pT_bin[n_pT_bins]= {0};
+	TH1D *inv_mass_in_pT_bin[n_pT_bins]= {0};
 	const int n_bins_in_histo = 100;
 	const double left_mass_histo_bound = 1.13;
 	const double right_mass_histo_bound = 1.23;
@@ -90,13 +90,12 @@ void get_efficiency() {
 	const int polynome_degree = 3;
 
 	for (int i = 0; i < n_pT_bins; ++i) {
-		auto title = Form("#Lambda#gamma invariant mass for %f #leq p_{T} #leq %f", pT_edges[i], pT_edges[i+1]);
-		inv_mass_in_pT_bin[i] = new TH1F();		
+		auto title = Form("#Lambda#gamma invariant mass for %g #leq p_{T} #leq %g", pT_edges[i], pT_edges[i+1]);
+		inv_mass_in_pT_bin[i] = new TH1D();		
 
 		int bin_index = int(bins_per_1GeV*pT_edges[i] + offset);
 		int next_bin_index = int(bins_per_1GeV*pT_edges[i+1] + offset);
-		//inv_mass_in_pT_bin[i] = reinterpret_cast<TH1F*>(inv_mass_vs_pT_bins->ProjectionX(Form("p_T_%d", i), bin_index, next_bin_index - 1));
-		inv_mass_in_pT_bin[i] = reinterpret_cast<TH1F*>(inv_mass_vs_pT_bins->ProjectionX(title, bin_index, next_bin_index - 1));
+		inv_mass_in_pT_bin[i] = inv_mass_vs_pT_bins->ProjectionX(title, bin_index, next_bin_index - 1);
 		inv_mass_in_pT_bin[i]->GetXaxis()->SetTitle("M#left(#Lambda#gamma#right) #left(#frac{GeV}{c^{2}}#right)");
 	}
 
@@ -135,9 +134,14 @@ void get_efficiency() {
 		TAxis *axis = inv_mass_in_pT_bin[i]->GetXaxis();
 		double n_particles_in_fit_range = inv_mass_in_pT_bin[i]->Integral(axis->FindBin(left_fit_bound), axis->FindBin(right_fit_bound));
 		double full_yield = full_fit->Integral(left_fit_bound, right_fit_bound)/bin_width; // normalization factor needed since TH1 and TF1 objects are detached
+		double full_yield_error = TMath::Sqrt(full_yield);
 		double background_yield = background->Integral(left_fit_bound, right_fit_bound)/bin_width;
+
 		Sigma_yield[i] = full_yield - background_yield;
+		Sigma_yield_error[i] = TMath::Sqrt(Sigma_yield[i]); // Poisson error or use regular rule for errors? 
+
 		significance[i] = Sigma_yield[i]/TMath::Sqrt(full_yield);
+		significance_error[i] = significance[i]*TMath::Sqrt(Sigma_yield_error[i]*Sigma_yield_error[i]/(Sigma_yield[i]*Sigma_yield[i]) + full_yield_error*full_yield_error/(4*full_yield*full_yield));
 
 		int n_pT_bins_generated = generated_Sigma_spectrum->GetNbinsX();
 
@@ -158,9 +162,12 @@ void get_efficiency() {
 		}
 
 		efficiency[i] = Sigma_yield[i]/n_events_generated;
+		efficiency_error[i] = efficiency[i]*TMath::Sqrt(Sigma_yield_error[i]*Sigma_yield_error[i]/(Sigma_yield[i]*Sigma_yield[i]) + 1/n_events_generated);
+
 		long int n_inelastic_interactions = z_vertex->GetEntries();
 		double base = efficiency[i]*2*rapidity_cut*2*pT_bins_center_error[i]*n_inelastic_interactions*1*2;
 		Sigma_spectrum[i] = Sigma_yield[i]/base;
+		Sigma_spectrum_error[i] = Sigma_spectrum[i]*Sigma_yield_error[i]/Sigma_yield[i];
 	}
 
 	TFile *file_Lambda = TFile::Open("LambdaSpectrum13TeV_NewBins.root", "READ");
@@ -173,6 +180,7 @@ void get_efficiency() {
 
 	for (int i = 0; i < n_pT_bins; ++i) {
 		Sigma_to_lambda_ratio[i] = Sigma_spectrum[i]/Lambda_spectrum->GetBinContent(i + 1);
+		Sigma_to_lambda_ratio_error[i] = Sigma_to_lambda_ratio[i]*TMath::Sqrt(Sigma_spectrum_error[i]*Sigma_spectrum_error[i]/(Sigma_spectrum[i]*Sigma_spectrum[i]) + Lambda_spectrum->GetBinError(i + 1)*Lambda_spectrum->GetBinError(i + 1)/(Lambda_spectrum->GetBinContent(i + 1)*Lambda_spectrum->GetBinContent(i + 1)));
 	}
 
 	TFile *results = TFile::Open("results.root", "RECREATE");
@@ -190,12 +198,12 @@ void get_efficiency() {
 	Sigma_to_lambda_ratio_pT_dependency->Write();
 
 	TCanvas *canvas_ratio = new TCanvas("canvas_ratio", "#frac{#Sigma^{0}}{#Lambda} spectrum", 0, 0, 800, 1000);
-	gStyle->SetOptStat(1111);
+	gStyle->SetOptStat(1);
 	Sigma_to_lambda_ratio_pT_dependency->Draw();
 
 	TCanvas *canvas_pT = new TCanvas("canvas_pT", " #Lambda#gamma Invariant mass in different p_{T} bins", 0, 0, 800, 1000);
-	gStyle->SetOptStat(1111);
-	gStyle->SetOptFit(1111);
+	gStyle->SetOptStat(1);
+	gStyle->SetOptFit(1);
 	canvas_pT->Divide(4,2);
 	for (int i = 0; i < n_pT_bins; ++i) {
 		canvas_pT->cd(i + 1);
@@ -257,7 +265,7 @@ void get_efficiency() {
 	Sigma_spectrum_pT_dependency->Write();
 
 	TCanvas *dependencies = new TCanvas("dependencies", "Various p_{T} dependencies", 0, 0, 800, 1000);
-	gStyle->SetOptStat(111111);
+	gStyle->SetOptStat(1);
 	dependencies->Divide(3,2);
 	dependencies->cd(1);
 	Sigma_yield_pT_dependency->Draw();
