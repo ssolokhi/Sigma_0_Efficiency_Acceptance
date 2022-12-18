@@ -30,10 +30,10 @@ double Breit_Wigner_with_background_fit(double *x, double *par) {
 }
 
 void get_efficiency() {
-	const double rapidity_cut = 0.5;
-	const int n_pT_bins = 8;
+	const double rapidity_cut = 0.8; //0.8 for real data, 0.5 for simulations
+	const int n_pT_bins = 7;
+	const double pT_edges[n_pT_bins+1] = {2.0, 2.3, 2.6, 3.1, 3.72, 4.9, 5.9, 10.0};
 
-	const double pT_edges[n_pT_bins+1] = {2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 6.0, 10.0};
 	double pT_bins_center[n_pT_bins] = {0};
 	double pT_bins_center_error[n_pT_bins] = {0};
 
@@ -59,6 +59,9 @@ void get_efficiency() {
 
 	double Sigma_spectrum[n_pT_bins] = {0};
 	double Sigma_spectrum_error[n_pT_bins] = {0};
+
+	double Lambda_spectrum[n_pT_bins] = {0};
+	double Lambda_spectrum_error[n_pT_bins] = {0};
 
 	TFile *file_data = TFile::Open("HISTOS-DT-21nov22.root", "READ");
 	if (!file_data) return;
@@ -113,7 +116,7 @@ void get_efficiency() {
 		full_fit->SetParameter(4, background->GetParameter(1)*0.8);
 		full_fit->SetParameter(5, background->GetParameter(2)*0.8);
 		full_fit->SetParameter(6, background->GetParameter(3)*0.8);
-		full_fit->SetLineColor(3);
+		full_fit->SetLineColor(2);
 
 		inv_mass_in_pT_bin[i]->Fit("full_fit", "IMEQ+", "", left_fit_bound, right_fit_bound);
 
@@ -170,17 +173,21 @@ void get_efficiency() {
 		Sigma_spectrum_error[i] = Sigma_spectrum[i]*Sigma_yield_error[i]/Sigma_yield[i];
 	}
 
-	TFile *file_Lambda = TFile::Open("LambdaSpectrum13TeV_NewBins.root", "READ");
+	TFile *file_Lambda = TFile::Open("LambdaSpectrum.root", "READ");
 	if (!file_Lambda) return;
-	TH1F *Lambda_spectrum = dynamic_cast<TH1F*>(file_Lambda->Get("h_LamSpectr_TotErr"));
-	if (!Lambda_spectrum) return;
+	TH1F *Lambda_spectrum_plot = dynamic_cast<TH1F*>(file_Lambda->Get("h_LamSpectr_TotErr"));
+	if (!Lambda_spectrum_plot) return;
 
 	double Sigma_to_lambda_ratio[n_pT_bins] = {0};
 	double Sigma_to_lambda_ratio_error[n_pT_bins] = {0};
+	double conversion_factor = 0.625;
 
 	for (int i = 0; i < n_pT_bins; ++i) {
-		Sigma_to_lambda_ratio[i] = Sigma_spectrum[i]/Lambda_spectrum->GetBinContent(i + 1);
-		Sigma_to_lambda_ratio_error[i] = Sigma_to_lambda_ratio[i]*TMath::Sqrt(Sigma_spectrum_error[i]*Sigma_spectrum_error[i]/(Sigma_spectrum[i]*Sigma_spectrum[i]) + Lambda_spectrum->GetBinError(i + 1)*Lambda_spectrum->GetBinError(i + 1)/(Lambda_spectrum->GetBinContent(i + 1)*Lambda_spectrum->GetBinContent(i + 1)));
+		Lambda_spectrum[i] = Lambda_spectrum_plot->GetBinContent(i + 1);
+		Lambda_spectrum_error[i] = Lambda_spectrum_plot->GetBinError(i + 1);
+		Sigma_to_lambda_ratio[i] = Sigma_spectrum[i]/Lambda_spectrum[i];
+		Sigma_to_lambda_ratio[i] *= conversion_factor;
+		Sigma_to_lambda_ratio_error[i] = Sigma_to_lambda_ratio[i]*TMath::Sqrt(Sigma_spectrum_error[i]*Sigma_spectrum_error[i]/(Sigma_spectrum[i]*Sigma_spectrum[i]) + Lambda_spectrum_error[i]*Lambda_spectrum_error[i]/(Lambda_spectrum[i]*Lambda_spectrum[i]));
 	}
 
 	TFile *results = TFile::Open("results.root", "RECREATE");
@@ -188,17 +195,47 @@ void get_efficiency() {
 		inv_mass_in_pT_bin[i]->Write();
 	}
 
+	TGraphErrors *Sigma_spectrum_pT_dependency = new TGraphErrors(n_pT_bins, pT_bins_center, Sigma_spectrum, pT_bins_center_error, Sigma_spectrum_error);
+	Sigma_spectrum_pT_dependency->SetTitle("#Sigma^{0} spectrum p_{T} dependency");
+	Sigma_spectrum_pT_dependency->GetXaxis()->SetTitle("p_{T} #left(#frac{GeV}{c}#right)");
+	Sigma_spectrum_pT_dependency->GetYaxis()->SetTitle("#Sigma^{0} spectrum");
+	Sigma_spectrum_pT_dependency->SetMarkerStyle(20);
+	Sigma_spectrum_pT_dependency->SetMinimum(0);
+	Sigma_spectrum_pT_dependency->Write();
+
+	TGraphErrors *Lambda_spectrum_pT_dependency = new TGraphErrors(n_pT_bins, pT_bins_center, Lambda_spectrum, pT_bins_center_error, Lambda_spectrum_error);
+	Lambda_spectrum_pT_dependency->SetTitle("#Lambda spectrum p_{T} dependency");
+	Lambda_spectrum_pT_dependency->GetXaxis()->SetTitle("p_{T} #left(#frac{GeV}{c}#right)");
+	Lambda_spectrum_pT_dependency->GetYaxis()->SetTitle("#Lambda spectrum");
+	Lambda_spectrum_pT_dependency->SetMarkerStyle(20);
+	Lambda_spectrum_pT_dependency->SetMinimum(0);
+	Lambda_spectrum_pT_dependency->Write();
+
 	TGraphErrors *Sigma_to_lambda_ratio_pT_dependency = new TGraphErrors(n_pT_bins, pT_bins_center, Sigma_to_lambda_ratio, pT_bins_center_error, Sigma_to_lambda_ratio_error);
-	Sigma_to_lambda_ratio_pT_dependency->SetTitle("#frac{#Sigma^{0}}{#Lambda} spectrum");
+	Sigma_to_lambda_ratio_pT_dependency->SetTitle("#Sigma^{0} / #Lambda spectrum");
 	Sigma_to_lambda_ratio_pT_dependency->GetXaxis()->SetTitle("p_{T} #left(#frac{GeV}{c}#right)");
-	Sigma_to_lambda_ratio_pT_dependency->GetYaxis()->SetTitle("#frac{#Sigma^{0}}{#Lambda}");
+	Sigma_to_lambda_ratio_pT_dependency->GetYaxis()->SetTitle("#Sigma^{0} / #Lambda");
 	Sigma_to_lambda_ratio_pT_dependency->SetMarkerStyle(20);
 	Sigma_to_lambda_ratio_pT_dependency->SetMinimum(0);
-	//Sigma_to_lambda_ratio_pT_dependency->SetMaximum(1);
 	Sigma_to_lambda_ratio_pT_dependency->Write();
 
-	TCanvas *canvas_ratio = new TCanvas("canvas_ratio", "#frac{#Sigma^{0}}{#Lambda} spectrum", 0, 0, 800, 1000);
+	TF1 *constant_fit = new TF1("constant_fit", "[0]", pT_bins_center[0], pT_bins_center[n_pT_bins - 1]);
+	Sigma_to_lambda_ratio_pT_dependency->Fit(constant_fit);
+	double chi2 = Sigma_to_lambda_ratio_pT_dependency->Chisquare(constant_fit);
+	std::cout << "The chi2 for constant fit is " << chi2 << std::endl;
+	TF1 *linear_fit = new TF1("linear_fit", "[0] + x*[1]", pT_bins_center[0], pT_bins_center[n_pT_bins - 1]);
+	Sigma_to_lambda_ratio_pT_dependency->Fit(linear_fit);
+	chi2 = Sigma_to_lambda_ratio_pT_dependency->Chisquare(linear_fit);
+	std::cout << "The chi2 for linear fit is " << chi2 << std::endl;
+
+	TCanvas *canvas_spectra = new TCanvas("canvas_ratio", "#frac{#Sigma^{0}}{#Lambda} spectrum", 0, 0, 800, 1000);
 	gStyle->SetOptStat(1);
+	canvas_spectra->Divide(3,1);
+	canvas_spectra->cd(1);
+	Sigma_spectrum_pT_dependency->Draw();
+	canvas_spectra->cd(2);
+	Lambda_spectrum_pT_dependency->Draw();
+	canvas_spectra->cd(3);
 	Sigma_to_lambda_ratio_pT_dependency->Draw();
 
 	TCanvas *canvas_pT = new TCanvas("canvas_pT", " #Lambda#gamma Invariant mass in different p_{T} bins", 0, 0, 800, 1000);
@@ -216,7 +253,6 @@ void get_efficiency() {
 	Sigma_yield_pT_dependency->GetYaxis()->SetTitle("#Sigma^{0} yield");
 	Sigma_yield_pT_dependency->SetMarkerStyle(20);
 	Sigma_yield_pT_dependency->SetMinimum(0);
-	//Sigma_yield_pT_dependency->SetMaximum(2500);
 	Sigma_yield_pT_dependency->Write();
 
 	TGraphErrors *Sigma_mass_pT_dependency = new TGraphErrors(n_pT_bins, pT_bins_center, Sigma_mass, pT_bins_center_error, Sigma_mass_error);
@@ -252,17 +288,7 @@ void get_efficiency() {
 	efficiency_pT_dependency->GetYaxis()->SetTitle("#Sigma^{0} efficiency");
 	efficiency_pT_dependency->SetMarkerStyle(20);
 	efficiency_pT_dependency->SetMinimum(0);
-	//efficiency_pT_dependency->SetMaximum(0.005);
 	efficiency_pT_dependency->Write();
-
-	TGraphErrors *Sigma_spectrum_pT_dependency = new TGraphErrors(n_pT_bins, pT_bins_center, Sigma_spectrum, pT_bins_center_error, Sigma_spectrum_error);
-	Sigma_spectrum_pT_dependency->SetTitle("#Sigma^{0} spectrum p_{T} dependency");
-	Sigma_spectrum_pT_dependency->GetXaxis()->SetTitle("p_{T} #left(#frac{GeV}{c}#right)");
-	Sigma_spectrum_pT_dependency->GetYaxis()->SetTitle("#Sigma^{0} spectrum");
-	Sigma_spectrum_pT_dependency->SetMarkerStyle(20);
-	Sigma_spectrum_pT_dependency->SetMinimum(0);
-	//Sigma_spectrum_pT_dependency->SetMaximum(0.008);
-	Sigma_spectrum_pT_dependency->Write();
 
 	TCanvas *dependencies = new TCanvas("dependencies", "Various p_{T} dependencies", 0, 0, 800, 1000);
 	gStyle->SetOptStat(1);
@@ -277,8 +303,6 @@ void get_efficiency() {
 	significance_pT_dependency->Draw();
 	dependencies->cd(5);
 	efficiency_pT_dependency->Draw();	
-	dependencies->cd(6);
-	Sigma_spectrum_pT_dependency->Draw();
 
 	std::cout << "Results written to output file!" << std::endl;
 	results->Close();
